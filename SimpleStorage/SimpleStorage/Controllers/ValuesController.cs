@@ -1,5 +1,8 @@
-﻿using System.Net;
+﻿using System.Collections.Generic;
+using System.Linq;
+using System.Net;
 using System.Web.Http;
+using Client;
 using Domain;
 using SimpleStorage.Infrastructure;
 
@@ -10,6 +13,7 @@ namespace SimpleStorage.Controllers
         private readonly IConfiguration configuration;
         private readonly IStateRepository stateRepository;
         private readonly IStorage storage;
+        private string shardFormat = "http://127.0.0.1:{0}/";
 
         public ValuesController(IStorage storage, IStateRepository stateRepository, IConfiguration configuration)
         {
@@ -28,10 +32,15 @@ namespace SimpleStorage.Controllers
         public Value Get(string id)
         {
             CheckState();
-            var result = storage.Get(id);
-            if (result == null)
+            var results = new List<Value> { storage.Get(id) };
+            results.AddRange(configuration.OtherShardsPorts
+                                            .Select(port => string.Format(shardFormat, port))
+                                            .Select(shard => new InternalClient(shard).Get(id))
+                     );
+
+            if (results.All(res => res == null))
                 throw new HttpResponseException(HttpStatusCode.NotFound);
-            return result;
+            return results.OrderByDescending(v => v, new ValueComparer()).First();
         }
 
         // PUT api/values/5
@@ -39,6 +48,13 @@ namespace SimpleStorage.Controllers
         {
             CheckState();
             storage.Set(id, value);
+
+            foreach (var shardPort in configuration.OtherShardsPorts)
+            {
+                var shard = string.Format(shardFormat, shardPort);
+                var internalClient = new InternalClient(shard);
+                internalClient.Put(id, value);
+            }
         }
     }
 }

@@ -9,7 +9,7 @@ namespace Client
     public class SimpleStorageClient : ISimpleStorageClient
     {
         private readonly IEnumerable<string> endpoints;
-
+        private const int AttemptsCount = 5;
         public SimpleStorageClient(params string[] endpoints)
         {
             if (endpoints == null || !endpoints.Any())
@@ -19,21 +19,52 @@ namespace Client
 
         public void Put(string id, Value value)
         {
-            var putUri = endpoints.First() + "api/values/" + id;
-            using (var client = new HttpClient())
-            using (var response = client.PutAsJsonAsync(putUri, value).Result)
-                response.EnsureSuccessStatusCode();
+            var attemptNumber = 1;
+            while (attemptNumber <= AttemptsCount)
+            {
+                foreach (var shard in endpoints)
+                {
+                    try
+                    {
+                        var putUri = shard + "api/values/" + id;
+                        using (var client = new HttpClient())
+                        using (var response = client.PutAsJsonAsync(putUri, value).Result)
+                            response.EnsureSuccessStatusCode();
+                    }
+                    catch (Exception)
+                    {
+
+                    }
+                }
+                attemptNumber++;
+            }
         }
 
         public Value Get(string id)
         {
-            var requestUri = endpoints.First() + "api/values/" + id;
-            using (var client = new HttpClient())
-            using (var response = client.GetAsync(requestUri).Result)
+            var attemptNumber = 1;
+            while (attemptNumber <= AttemptsCount)
             {
-                response.EnsureSuccessStatusCode();
-                return response.Content.ReadAsAsync<Value>().Result;
+                foreach (var shard in endpoints)
+                {
+                    var requestUri = shard + "api/values/" + id;
+                    try
+                    {
+                        using (var client = new HttpClient())
+                        using (var response = client.GetAsync(requestUri).Result)
+                        {
+                            response.EnsureSuccessStatusCode();
+                            return response.Content.ReadAsAsync<Value>().Result;
+                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+                attemptNumber++;
             }
+
+            return null;
         }
     }
 }
