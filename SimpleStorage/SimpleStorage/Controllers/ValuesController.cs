@@ -1,6 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Web.Http;
 using Client;
 using Domain;
@@ -13,13 +15,14 @@ namespace SimpleStorage.Controllers
         private readonly IConfiguration configuration;
         private readonly IStateRepository stateRepository;
         private readonly IStorage storage;
-        private string shardFormat = "http://127.0.0.1:{0}/";
-
+        private string shardFormat = "http://{0}/";
+        private readonly int quorum;
         public ValuesController(IStorage storage, IStateRepository stateRepository, IConfiguration configuration)
         {
             this.storage = storage;
             this.stateRepository = stateRepository;
             this.configuration = configuration;
+            this.quorum = (configuration.OtherReplicas.Count() + 1) / 2 + 1;
         }
 
         private void CheckState()
@@ -33,14 +36,44 @@ namespace SimpleStorage.Controllers
         {
             CheckState();
             var results = new List<Value> { storage.Get(id) };
-            results.AddRange(configuration.OtherShardsPorts
-                                            .Select(port => string.Format(shardFormat, port))
-                                            .Select(shard => new InternalClient(shard).Get(id))
-                     );
+            var count = 1;
+            foreach (var shardPort in configuration.OtherReplicas)
+            {
+                if (count >= quorum)
+                    break;
 
-            if (results.All(res => res == null))
+                var client = new InternalClient(string.Format(shardFormat, shardPort));
+
+                try
+                {
+                    var result = client.Get(id);
+                    results.Add(result);
+                    count++;
+                }
+                catch (HttpRequestException ex)
+                {
+                    if (ex.Message.Contains("404"))
+                    {
+                        results.Add(null);
+                        count++;
+                    }
+                }
+                catch (Exception)
+                {
+                    
+                }
+            }
+
+            if (count < quorum)
+            {
+                throw new HttpResponseException(HttpStatusCode.InternalServerError);
+            }
+
+            var res  = results.OrderByDescending(v => v, new ValueComparer()).First();
+            if (res == null)
                 throw new HttpResponseException(HttpStatusCode.NotFound);
-            return results.OrderByDescending(v => v, new ValueComparer()).First();
+
+            return res;
         }
 
         // PUT api/values/5
@@ -49,12 +82,25 @@ namespace SimpleStorage.Controllers
             CheckState();
             storage.Set(id, value);
 
-            foreach (var shardPort in configuration.OtherShardsPorts)
+            var count = 1;
+            foreach (var shardPort in configuration.OtherReplicas)
             {
-                var shard = string.Format(shardFormat, shardPort);
-                var internalClient = new InternalClient(shard);
-                internalClient.Put(id, value);
+                if (count >= quorum)
+                    break;
+
+                var client = new InternalClient(string.Format(shardFormat, shardPort));
+
+                try
+                {
+                    client.Put(id, value);
+                    count++;
+                }
+                catch (Exception)
+                {
+                
+                }
             }
         }
+
     }
 }

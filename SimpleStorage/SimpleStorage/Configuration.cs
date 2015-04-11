@@ -11,6 +11,7 @@ namespace SimpleStorage
             IsMaster = !topology.Replicas.Any();
             if (!IsMaster)
                 MasterEndpoint = topology.Replicas.First();
+            OtherReplicas = topology.Replicas.ToArray();
         }
 
         public bool IsMaster { get; private set; }
@@ -18,5 +19,6 @@ namespace SimpleStorage
 
         public int CurrentNodePort { get; set; }
         public int[] OtherShardsPorts { get; set; }
+        public IPEndPoint[] OtherReplicas { get; set; }
     }
 }

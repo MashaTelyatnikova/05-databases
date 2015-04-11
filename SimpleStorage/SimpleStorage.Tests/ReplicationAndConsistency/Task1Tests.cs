@@ -10,7 +10,6 @@ using NUnit.Framework.Constraints;
 namespace SimpleStorage.Tests.ReplicationAndConsistency
 {
     [TestFixture]
-    [Ignore]
     public class Task1Tests : FuctionalTestBase
     {
         [SetUp]

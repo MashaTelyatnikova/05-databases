@@ -56,17 +56,26 @@ namespace SimpleStorage.Tests.ReplicationAndConsistency
         public void Get_ManyTimes_ShouldFaultTolerant()
         {
             string id = Guid.NewGuid().ToString();
-            var value = new Value {Content = "content"};
+            var value = new Value { Content = "content" };
             fullTopologyClient.Put(id, value);
 
-            for (int i = 0; i < 100; ++i)
-            {
-                fullTopologyClient.Get(id);
-            }
+            //for (int i = 0; i < 100; ++i)
+            //{
+            //    Assert.That(fullTopologyClient.Get(id).Content, Is.EqualTo(value.Content)); 
+            //}
             Thread.Sleep(2000);
-            TestReplicaDown(replica1Endpoint, () => fullTopologyClient.Get(id));
-            TestReplicaDown(replica2Endpoint, () => fullTopologyClient.Get(id));
-            TestReplicaDown(replica3Endpoint, () => fullTopologyClient.Get(id));
+            TestReplicaDown(replica1Endpoint, () =>
+            {
+                Assert.That(fullTopologyClient.Get(id).Content, Is.EqualTo(value.Content)); 
+            });
+            TestReplicaDown(replica2Endpoint, () =>
+            {
+                Assert.That(fullTopologyClient.Get(id).Content, Is.EqualTo(value.Content)); 
+            });
+            TestReplicaDown(replica3Endpoint, () =>
+            {
+                Assert.That(fullTopologyClient.Get(id).Content, Is.EqualTo(value.Content)); 
+            });
         }
 
         [Test]
@@ -78,8 +87,9 @@ namespace SimpleStorage.Tests.ReplicationAndConsistency
 
             for (int i = 0; i < 100; ++i)
             {
-                fullTopologyClient.Get(id);
+                Assert.That(fullTopologyClient.Get(id).Content, Is.EqualTo(value.Content)); 
             }
+
             Thread.Sleep(2000);
             TestReplicaDown(replica1Endpoint, () => fullTopologyClient.Put(id, value));
             TestReplicaDown(replica2Endpoint, () => fullTopologyClient.Put(id, value));

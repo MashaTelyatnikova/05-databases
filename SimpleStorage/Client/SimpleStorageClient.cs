@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Web.Http;
 using Domain;
 
 namespace Client
@@ -9,7 +11,6 @@ namespace Client
     public class SimpleStorageClient : ISimpleStorageClient
     {
         private readonly IEnumerable<string> endpoints;
-        private const int AttemptsCount = 5;
         public SimpleStorageClient(params string[] endpoints)
         {
             if (endpoints == null || !endpoints.Any())
@@ -19,52 +20,46 @@ namespace Client
 
         public void Put(string id, Value value)
         {
-            var attemptNumber = 1;
-            while (attemptNumber <= AttemptsCount)
-            {
-                foreach (var shard in endpoints)
-                {
-                    try
-                    {
-                        var putUri = shard + "api/values/" + id;
-                        using (var client = new HttpClient())
-                        using (var response = client.PutAsJsonAsync(putUri, value).Result)
-                            response.EnsureSuccessStatusCode();
-                    }
-                    catch (Exception)
-                    {
 
-                    }
+            foreach (var shard in endpoints)
+            {
+                try
+                {
+                    var putUri = shard + "api/values/" + id;
+                    using (var client = new HttpClient())
+                    using (var response = client.PutAsJsonAsync(putUri, value).Result)
+                        response.EnsureSuccessStatusCode();
+                    return;
                 }
-                attemptNumber++;
+                catch (Exception)
+                {
+
+                }
             }
+            throw new Exception();
         }
 
         public Value Get(string id)
         {
-            var attemptNumber = 1;
-            while (attemptNumber <= AttemptsCount)
+            foreach (var shard in endpoints)
             {
-                foreach (var shard in endpoints)
+                var requestUri = shard + "api/values/" + id;
+                try
                 {
-                    var requestUri = shard + "api/values/" + id;
-                    try
+                    using (var client = new HttpClient())
+                    using (var response = client.GetAsync(requestUri).Result)
                     {
-                        using (var client = new HttpClient())
-                        using (var response = client.GetAsync(requestUri).Result)
-                        {
-                            response.EnsureSuccessStatusCode();
-                            return response.Content.ReadAsAsync<Value>().Result;
-                        }
-                    }
-                    catch (Exception)
-                    {
+                        response.EnsureSuccessStatusCode();
+                        return response.Content.ReadAsAsync<Value>().Result;
                     }
                 }
-                attemptNumber++;
-            }
+                catch (Exception)
+                {
 
-            return null;
+                }
+            }
+             
+            throw new HttpResponseException(HttpStatusCode.NotImplemented);
         }
     }
 }
